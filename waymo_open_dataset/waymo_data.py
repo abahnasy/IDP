@@ -23,13 +23,15 @@ import waymo_utils
 from box_util import view_points, get_corners_from_labels_array
 
 # Object types 
-DEFAULT_TYPE_WHITELIST = ['TYPE_UNKNOWN','TYPE_VEHICLE','TYPE_PEDESTRIAN','TYPE_SIGN','TYPE_CYCLIST']
+DEFAULT_TYPE_WHITELIST = ['TYPE_VEHICLE','TYPE_PEDESTRIAN','TYPE_CYCLIST']
 
 
 
 class waymo_object(object):
     ''' Load and parse object data '''
     def __init__(self, root_dir, split='train', verbose:bool = False):
+        # self.excluded_labels = [0,3] # exclude unknown and signs labels
+        self.type_whitelist = DEFAULT_TYPE_WHITELIST
         self.root_dir = root_dir
         self.split = split
         self.split_dir = os.path.join(BASE_DIR, root_dir, split)
@@ -102,7 +104,15 @@ class waymo_object(object):
         if not os.path.exists(frame_data_path):
             print(frame_data_path)
             raise ValueError('frame data is not found !')
-        return waymo_utils.read_frame_bboxes(frame_data_path)
+        rows_to_be_deleted = []
+        labels = waymo_utils.read_frame_bboxes(frame_data_path)
+        
+        for i in range(labels.shape[0]):
+            if not self.class2type[labels[i,0]] in self.type_whitelist:
+                rows_to_be_deleted.append(i)
+        labels = np.delete(labels, rows_to_be_deleted, 0)
+        
+        return labels
 
 def data_viz(data_dir, idx: int = np.nan, verbose: bool = False):  
     ''' Visualize frame from Waymo data '''
@@ -280,15 +290,23 @@ def get_box3d_dim_statistics(data_dir, type_whitelist=DEFAULT_TYPE_WHITELIST, sa
     dimension_list = []
     # type_list = []
     # ry_list = []
+    max_point_cloud_size = 0
     for data_idx in range(len(dataset)):
-        
+        # collect boxes
         bboxes = dataset.get_labels(data_idx)
         dimension_list.append(bboxes[:,0:4])
+        # get max point cloud
+        pc = dataset.get_point_cloud(data_idx)
+        pc_size = pc.shape[0]
+        if pc_size > max_point_cloud_size:
+            max_point_cloud_size = pc_size
     
     all_boxes = np.concatenate(dimension_list, axis = 0)
     median_statistics = {}
     
     for class_type in range(5):
+        if dataset.class2type[class_type] not in type_whitelist: # check if they are within the allowed classes
+            continue
         mask = (all_boxes[:,0] == class_type)
         class_boxes = all_boxes[mask]
         if class_boxes.shape[0] == 0:
@@ -296,6 +314,8 @@ def get_box3d_dim_statistics(data_dir, type_whitelist=DEFAULT_TYPE_WHITELIST, sa
         class_boxes = class_boxes[:,1:]
         median_statistics[class_type] = np.median(class_boxes, axis=0)
         print("\'{}\': np.array([{:f},{:f},{:f}]),".format(class_type, median_statistics[class_type][0], median_statistics[class_type][1], median_statistics[class_type][2]))
+
+        print("max Point Cloud size is {}".format(max_point_cloud_size))
 
     if save_path is not None:
         with open(save_path,'wb') as fp:
@@ -316,7 +336,7 @@ if __name__=='__main__':
     args = parser.parse_args()
 
     # step 1
-    if args.preprocessing_train:
+    if args.preprocessing_train: # depreciated, the steps are now handled in the downscript
         waymo_utils.preprocess_waymo_data('./dataset', 'train', args.verbose)
         exit()
 
@@ -350,6 +370,13 @@ if __name__=='__main__':
     if args.viz:
         data_viz(os.path.join(BASE_DIR, 'dataset'), idx = 0, verbose = args.verbose)
         exit()
+
+    # test data loader
+    dataset = waymo_object(os.path.join(BASE_DIR, 'dataset'))
+    print(len(dataset))
+    dataset.get_labels(2)
+
+    
 
     
     

@@ -46,6 +46,7 @@ class WaymoDetectionVotesDataset(Dataset):
         verbose:bool = True):
 
         # assert(num_points<=60000)
+        self.exclude_labels = [3,4] # exclude cyclists and signs labels
         self.split_set = split_set
         self.data_path = os.path.join(BASE_DIR,
                 'dataset') # TODO: rename to votes data path
@@ -116,6 +117,8 @@ class WaymoDetectionVotesDataset(Dataset):
         # create bboxes matrix
         bboxes = np.zeros_like(labels)
         for i in range(labels.shape[0]):
+            if labels[i,0] in exclude_labels: # skip signs and unknown labels
+                continue
             bboxes[i, 0:3] = labels[i,4:7] #centers
             bboxes[i, 3:6] = labels[i,1:4] #lwh
             bboxes[i, 6] = labels[i,7] # heading

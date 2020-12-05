@@ -169,8 +169,8 @@ def read_frame_bboxes(frame_data_path):
     ''' Return array of bounding boxes
     '''
     with np.load(frame_data_path) as frame_data:
-        point_cloud = frame_data['labels']
-    return point_cloud
+        labels = frame_data['labels']
+    return labels
 
 def read_frame_bboxes_as_objects(label_file_name):
     bboxes = []
