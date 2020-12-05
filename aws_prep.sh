@@ -3,7 +3,7 @@ cd ~
 pip3 install torch==1.4.0 torchvision==0.5.0 -f https://download.pytorch.org/whl/cu100/torch_stable.html
 
 # build CUDA Layers
-cd votenet/pointnet2
+cd IDP/pointnet2
 sudo python3 setup.py install
 cd ..
 pip3 install -r requirements.txt

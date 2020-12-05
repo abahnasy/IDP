@@ -15,18 +15,17 @@ class WaymoDatasetConfig(object):
     def __init__(self):
         self.num_class = 5
         self.num_heading_bin = 12 # TODO: Figure out what is this?!
-        self.num_size_cluster = 5 # same as number of classes
+        self.num_size_cluster = 3 # same as number of classes
 
-        self.type2class = {'TYPE_UNKNOWN':0,'TYPE_VEHICLE':1,'TYPE_PEDESTRIAN':2,'TYPE_SIGN':3,'TYPE_CYCLIST':4}
+        # self.type2class = {'TYPE_UNKNOWN':0,'TYPE_VEHICLE':1,'TYPE_PEDESTRIAN':2,'TYPE_SIGN':3,'TYPE_CYCLIST':4}
+        self.type2class = {'TYPE_VEHICLE':0,'TYPE_PEDESTRIAN':1,'TYPE_CYCLIST':2}
         self.class2type = {self.type2class[t]:t for t in self.type2class}
-        self.type2onehotclass={'TYPE_UNKNOWN':0, 'TYPE_VEHICLE':1, 'TYPE_PEDESTRIAN':2, 'TYPE_SIGN':3, 'TYPE_CYCLIST':4}
+        self.type2onehotclass={'TYPE_VEHICLE':0, 'TYPE_PEDESTRIAN':1, 'TYPE_CYCLIST':2}
         
         # run --compute_median_size to get these values based on the current data you have
-        self.type_mean_size = {'TYPE_UNKNOWN': np.array([4.550878,2.069160,1.755000]), # Temp values, cannot find unknow in the current subset of the data
-                          'TYPE_VEHICLE': np.array([4.550878,2.069160,1.755000]),
-                          'TYPE_PEDESTRIAN': np.array([0.858276,0.819377,1.750000]),
-                          'TYPE_SIGN': np.array([0.097881,0.590338,0.650000]),
-                          'TYPE_CYCLIST': np.array([2.114592,0.859100,2.070000])}
+        self.type_mean_size = {'TYPE_VEHICLE': np.array([4.628242,2.075742,1.690000]),
+                          'TYPE_PEDESTRIAN': np.array([0.913247,0.846451,1.758479]),
+                          'TYPE_CYCLIST': np.array([1.846484,0.834043,1.800000])}
 
         self.mean_size_arr = np.zeros((self.num_size_cluster, 3))
         for i in range(self.num_size_cluster):

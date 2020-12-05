@@ -40,13 +40,12 @@ MAX_NUM_OBJ = 128 # maximum number of objects allowed per scene
 # MEAN_COLOR_RGB = np.array([0.5,0.5,0.5]) # sunrgbd color is in 0~1
 
 class WaymoDetectionVotesDataset(Dataset):
-    def __init__(self, split_set='train', num_points=60000,
+    def __init__(self, split_set='train', num_points=180000,
         use_height=False,
         augment=False,
         verbose:bool = True):
-
-        # assert(num_points<=60000)
-        self.exclude_labels = [3,4] # exclude cyclists and signs labels
+        self.mapping_labels = {1:0,2:1,4:2} # map dataset labels to our labels to handle discarded classes 
+        self.excluded_labels = [0,3] # exclude unknowns and signs labels
         self.split_set = split_set
         self.data_path = os.path.join(BASE_DIR,
                 'dataset') # TODO: rename to votes data path
@@ -75,7 +74,7 @@ class WaymoDetectionVotesDataset(Dataset):
     def __len__(self):
         return self.num_frames
     
-    def resolve_idx_to_frame(self, idx):
+    def resolve_idx_to_frame_path(self, idx):
         ''' Get Global idx and transorm into segment frame idx
         '''
         frame_idx = idx
@@ -83,7 +82,12 @@ class WaymoDetectionVotesDataset(Dataset):
             if frame_idx >= segment_dict['frame_count']:
                 frame_idx -= segment_dict['frame_count']
             else:
-                return (segment_dict['id'], frame_idx)
+                frames_list = os.listdir(os.path.join(self.data_path, self.split_set, segment_dict['id']))
+                frame_path = os.path.join(self.data_path, self.split_set, segment_dict['id'], frames_list[frame_idx])
+                if not os.path.exists(frame_path):
+                    raise ValueError("Frame path doesn't exist")
+                # print(frame_path)
+                return frame_path
 
     def __getitem__(self, idx):
         """
@@ -103,7 +107,9 @@ class WaymoDetectionVotesDataset(Dataset):
             scan_idx: int scan index in scan_names list
             max_gt_bboxes: unused
         """
-        segment_id, frame_idx = self.resolve_idx_to_frame(idx)
+        frame_data_path = self.resolve_idx_to_frame_path(idx)
+        segment_id = frame_data_path.split('/')[-2] 
+        frame_idx = frame_data_path.split('/')[-1].split('_')[-1].split('.')[0]
         
         point_cloud = np.load(os.path.join(self.data_path, self.split_set, 'votes', '{}'.format(segment_id), '{}_{}_pc.npz'.format(segment_id, frame_idx)))['pc'] # Nx3
 
@@ -117,12 +123,12 @@ class WaymoDetectionVotesDataset(Dataset):
         # create bboxes matrix
         bboxes = np.zeros_like(labels)
         for i in range(labels.shape[0]):
-            if labels[i,0] in exclude_labels: # skip signs and unknown labels
+            if labels[i,0] in self.excluded_labels: # skip signs and unknown labels
                 continue
             bboxes[i, 0:3] = labels[i,4:7] #centers
             bboxes[i, 3:6] = labels[i,1:4] #lwh
             bboxes[i, 6] = labels[i,7] # heading
-            bboxes[i, 7] = labels[i,0] #label
+            bboxes[i, 7] = self.mapping_labels[labels[i,0]] #label
         
         
         point_votes = np.load(os.path.join(self.data_path, self.split_set, 'votes', '{}'.format(segment_id) ,'{}_{}_votes.npz'.format(segment_id, frame_idx)))['point_votes'] # Nx10
@@ -139,6 +145,7 @@ class WaymoDetectionVotesDataset(Dataset):
 
         # ------------------------------- DATA AUGMENTATION ------------------------------
         if self.augment:
+            raise NotImplementedError
             # Rotation along up-axis/Z-axis
             rot_angle = (np.random.random()*np.pi/3) - np.pi/6 # -30 ~ +30 degree
             rot_mat = waymo_utils.rotz(rot_angle)
@@ -293,7 +300,7 @@ def get_sem_cls_statistics():
 
 if __name__=='__main__':
     d = WaymoDetectionVotesDataset(use_height=True, augment=False)
-    sample = d[0]
+    sample = d[600]
     print(sample['vote_label'].shape, sample['vote_label_mask'].shape)
     pc_util.write_ply(sample['point_clouds'], 'pc.ply')
     viz_votes(sample['point_clouds'], sample['vote_label'], sample['vote_label_mask'])
