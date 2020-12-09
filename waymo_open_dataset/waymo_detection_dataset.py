@@ -36,7 +36,7 @@ import waymo_utils
 from model_util_waymo import WaymoDatasetConfig
 
 DC = WaymoDatasetConfig() # dataset specific config
-MAX_NUM_OBJ = 128 # maximum number of objects allowed per scene
+MAX_NUM_OBJ = 384 # maximum number of objects allowed per scene
 # MEAN_COLOR_RGB = np.array([0.5,0.5,0.5]) # sunrgbd color is in 0~1
 
 class WaymoDetectionVotesDataset(Dataset):
@@ -60,6 +60,8 @@ class WaymoDetectionVotesDataset(Dataset):
             raise ValueError('segments Dictionary list is not found, make sure to preprocess the data first')
         with open(self.segments_dict_list_path, 'rb') as f:
             self.segments_dict_list = pickle.load(f)
+        
+
         self.num_segments = len(self.segments_dict_list)
         if verbose: print("No of segments in the dataset is {}".format(len(self.segments_dict_list)))
         self.num_frames = 0
@@ -85,8 +87,7 @@ class WaymoDetectionVotesDataset(Dataset):
                 frames_list = os.listdir(os.path.join(self.data_path, self.split_set, segment_dict['id']))
                 frame_path = os.path.join(self.data_path, self.split_set, segment_dict['id'], frames_list[frame_idx])
                 if not os.path.exists(frame_path):
-                    raise ValueError("Frame path doesn't exist")
-                # print(frame_path)
+                    raise ValueError("Frame path doesn't exist, error in idx_to_frame_path function")
                 return frame_path
 
     def __getitem__(self, idx):
@@ -108,10 +109,19 @@ class WaymoDetectionVotesDataset(Dataset):
             max_gt_bboxes: unused
         """
         frame_data_path = self.resolve_idx_to_frame_path(idx)
+        
         segment_id = frame_data_path.split('/')[-2] 
+        
         frame_idx = frame_data_path.split('/')[-1].split('_')[-1].split('.')[0]
+        # print('data idx is ', idx)
+        # print('extracted segment id is ', segment_id)
+        # print('extracted frame idx is ', frame_idx)
+        # print("path is ", frame_data_path)
         
         point_cloud = np.load(os.path.join(self.data_path, self.split_set, 'votes', '{}'.format(segment_id), '{}_{}_pc.npz'.format(segment_id, frame_idx)))['pc'] # Nx3
+        if not os.path.exists(os.path.join(self.data_path, self.split_set, 'votes', '{}'.format(segment_id), '{}_{}_pc.npz'.format(segment_id, frame_idx))):
+            print('this path does not exist !!')
+            print(os.path.join(self.data_path, self.split_set, 'votes', '{}'.format(segment_id), '{}_{}_pc.npz'.format(segment_id, frame_idx)))
 
         assert point_cloud.shape[1] == 3
         
@@ -300,7 +310,9 @@ def get_sem_cls_statistics():
 
 if __name__=='__main__':
     d = WaymoDetectionVotesDataset(use_height=True, augment=False)
-    sample = d[600]
+    # for i in range(len(d)):
+    
+    sample = d[0]
     print(sample['vote_label'].shape, sample['vote_label_mask'].shape)
     pc_util.write_ply(sample['point_clouds'], 'pc.ply')
     viz_votes(sample['point_clouds'], sample['vote_label'], sample['vote_label_mask'])

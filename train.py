@@ -59,6 +59,7 @@ parser.add_argument('--no_height', action='store_true', help='Do NOT use height 
 parser.add_argument('--overwrite', action='store_true', help='Overwrite existing log and dump folders.')
 parser.add_argument('--dump_results', action='store_true', help='Dump results.')
 parser.add_argument('--verbose', action='store_true', help='Print debugging messages')
+parser.add_argument('--dry_run', action='store_true', help='Run single pass to check the network function')
 
 parser.add_argument('--load_saved_model', action='store_true')
 FLAGS = parser.parse_args()
@@ -196,7 +197,7 @@ VAL_VISUALIZER = TfVisualizer(FLAGS, 'val')
 
 # Used for AP calculation
 CONFIG_DICT = {'remove_empty_box':False, 'use_3d_nms':True,
-    'nms_iou':0.25, 'use_old_type_nms':False, 'cls_nms':True,
+    'nms_iou':0.01, 'use_old_type_nms':False, 'cls_nms':True,
     'per_class_proposal': False, 'conf_thresh':0.05,
     'dataset_config':DATASET_CONFIG}
 
@@ -210,9 +211,9 @@ def train_one_epoch():
     # print("\nGPU Memory usage before adding the inputs from data loader is {}".format(torch.cuda.memory_allocated(0)))
     for batch_idx, batch_data_label in enumerate(TRAIN_DATALOADER):
         print("Training Batch {}, Epoch {}".format(batch_idx, EPOCH_CNT))
-        # if FLAGS.verbose: print("\nmoving input data dictionary to device")
+        if FLAGS.verbose: print("\nmoving input data dictionary to device")
         for key in batch_data_label:
-            # if FLAGS.verbose: print("key: {}, dimensions: {}".format(key, batch_data_label[key].shape))
+            if FLAGS.verbose: print("batch label key: {}, dimensions: {}".format(key, batch_data_label[key].shape))
             batch_data_label[key] = batch_data_label[key].to(device)
         # print("\nGPU Memory usage after adding the inputs from data loader is {}".format(torch.cuda.memory_allocated(0)))
         
@@ -222,6 +223,8 @@ def train_one_epoch():
         inputs = {'point_clouds': batch_data_label['point_clouds']}
         # if FLAGS.verbose: print("\n setting inputs dictionary with point clouds and feed it to the model, point cloud dimensions are {}".format(inputs['point_clouds'].shape))
         end_points = net(inputs)
+        # for key,_ in end_points.items():
+            # if FLAGS.verbose: print("end points key: {}, dimensions: {}".format(key, end_points[key].shape))
 
 
         # if FLAGS.verbose:
@@ -234,7 +237,6 @@ def train_one_epoch():
         # Compute loss and gradients, update parameters.
         for key in batch_data_label:
             assert(key not in end_points)
-            # if FLAGS.verbose: print("{}, size is {}".format(key, batch_data_label[key].shape))
             end_points[key] = batch_data_label[key]
         loss, end_points = criterion(end_points, DATASET_CONFIG)
         loss.backward()
@@ -249,28 +251,20 @@ def train_one_epoch():
                 stat_dict[key] += end_points[key].item()
 
         
-        # ==== Temp implementation for visual Debugging === #
-        # batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT) 
-        # batch_gt_map_cls = parse_groundtruths(end_points, CONFIG_DICT) 
-        # # Extract prediction for visialization
-        # import pickle 
-        # with open("./visualizations", 'wb') as fp:
-        #     dictie = {}
-        #     dictie['point_cloud'] = batch_data_label['point_clouds'].detach().cpu().numpy()
-        #     dictie['sa1_xyz'] = end_points['sa1_xyz'].detach().cpu().numpy()
-        #     dictie['sa2_xyz'] = end_points['sa2_xyz'].detach().cpu().numpy()
-        #     dictie['sa3_xyz'] = end_points['sa3_xyz'].detach().cpu().numpy()
-        #     dictie['sa4_xyz'] = end_points['sa4_xyz'].detach().cpu().numpy()
-        #     dictie['parsed_gt'] = batch_gt_map_cls
-        #     dictie['parsed_predictions'] = batch_pred_map_cls
-        #     pickle.dump(dictie, fp)
+
+        
         
         # ==== Temp implementation === #
-    #     TRAIN_VISUALIZER.log_scalars({key:stat_dict[key]/float(batch_idx+1) for key in stat_dict},
-    #     (EPOCH_CNT*len(TRAIN_DATALOADER)+batch_idx)*BATCH_SIZE)
-            # for key in sorted(stat_dict.keys()):
-            #     log_string('mean %s: %f'%(key, stat_dict[key]/float(batch_idx+1)))
-            #     stat_dict[key] = 0    
+        # TRAIN_VISUALIZER.log_scalars({key:stat_dict[key]/FLAGS.batch_size for key in stat_dict},(EPOCH_CNT*len(TRAIN_DATALOADER)+batch_idx))
+        # for key in sorted(stat_dict.keys()):
+        #     log_string('mean %s: %f'%(key, stat_dict[key]/FLAGS.batch_size))
+        #     stat_dict[key] = 0 
+
+        if FLAGS.dry_run == True:
+            print('Dry run successfully executed !')
+            exit()
+
+        
         
         
    # Epoch Logging
@@ -318,7 +312,7 @@ def evaluate_one_epoch():
 
     # Log statistics
     VAL_VISUALIZER.log_scalars({key:stat_dict[key]/float(batch_idx+1) for key in stat_dict},
-        (EPOCH_CNT+1)*len(TRAIN_DATALOADER)*BATCH_SIZE)
+        (EPOCH_CNT+1))
     for key in sorted(stat_dict.keys()):
         log_string('eval mean %s: %f'%(key, stat_dict[key]/(float(batch_idx+1))))
 
@@ -369,20 +363,21 @@ def evaluate_overfit_run():
             print("number of predictions in frame {} is: {}".format(i, len(batch_pred_map_cls[i])))
 
         # Extract prediction for visialization
-        import pickle 
         print("exporting visualizations file")
-        with open("./saved_viz/visualizations_{}".format(EPOCH_CNT), 'wb') as fp:
-            dictie = {}
-            # pick only the first frame in the batch
-            dictie['point_cloud'] = batch_data_label['point_clouds'][0].detach().cpu().numpy()
-            dictie['parsed_gt'] = batch_gt_map_cls[0]
-            dictie['parsed_predictions'] = batch_pred_map_cls[0]
-            dictie['sa1_xyz'] = end_points['sa1_xyz'][0].detach().cpu().numpy()
-            dictie['sa2_xyz'] = end_points['sa2_xyz'][0].detach().cpu().numpy()
-            dictie['sa3_xyz'] = end_points['sa3_xyz'][0].detach().cpu().numpy()
-            dictie['sa4_xyz'] = end_points['sa4_xyz'][0].detach().cpu().numpy()
-            dictie['fp2_xyz'] = end_points['fp2_xyz'][0].detach().cpu().numpy()
+        dictie = {}
+        # pick only the first frame in the batch
+        dictie['point_cloud'] = batch_data_label['point_clouds'][0].detach().cpu().numpy()
+        dictie['parsed_gt'] = batch_gt_map_cls[0]
+        dictie['parsed_predictions'] = batch_pred_map_cls[0]
+        # dictie['sa1_xyz'] = end_points['sa1_xyz'][0].detach().cpu().numpy()
+        # dictie['sa2_xyz'] = end_points['sa2_xyz'][0].detach().cpu().numpy()
+        # dictie['sa3_xyz'] = end_points['sa3_xyz'][0].detach().cpu().numpy()
+        # dictie['sa4_xyz'] = end_points['sa4_xyz'][0].detach().cpu().numpy()
+        # dictie['fp2_xyz'] = end_points['fp2_xyz'][0].detach().cpu().numpy()
+        import pickle
+        with open("./saved_viz/gt_epoch_{}_batch_{}".format(EPOCH_CNT, batch_idx), 'wb') as fp:
             pickle.dump(dictie, fp)
+            
 
         
         
@@ -422,17 +417,26 @@ def train(start_epoch):
         train_one_epoch()
         print("Logging Visualizations for validation")
         loss = evaluate_overfit_run()
-            # loss = evaluate_one_epoch()
+        # loss = evaluate_one_epoch()
         # Save checkpoint
-        # save_dict = {'epoch': epoch+1, # after training one epoch, the start_epoch should be epoch+1
-        #             'optimizer_state_dict': optimizer.state_dict(),
-        #             'loss': loss,
-        #             }
-        # try: # with nn.DataParallel() the net is added as a submodule of DataParallel
-            # save_dict['model_state_dict'] = net.module.state_dict()
-        # except:
-        # save_dict['model_state_dict'] = net.state_dict()
-        # torch.save(save_dict, os.path.join(LOG_DIR, 'checkpoint.tar'))
+        save_dict = {'epoch': epoch+1, # after training one epoch, the start_epoch should be epoch+1
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss,
+                    }
+        
+        save_dict['model_state_dict'] = net.state_dict()
+        torch.save(save_dict, os.path.join(LOG_DIR, 'checkpoint.tar'))
+
+        # save best loss
+        if loss < min_loss:
+            min_loss = loss
+            save_dict = {'epoch': epoch+1, # after training one epoch, the start_epoch should be epoch+1
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': loss,
+                        }
+            
+            save_dict['model_state_dict'] = net.state_dict()
+            torch.save(save_dict, os.path.join(LOG_DIR, 'best_model.tar'))
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -469,7 +473,7 @@ if __name__=='__main__':
             batch_gt_map_cls = parse_groundtruths(end_points, CONFIG_DICT)
             batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT) 
         
-            with open("./visualizations", 'wb') as fp:
+            with open("./viz_loaded_model_results", 'wb') as fp:
                 dictie = {}
                 dictie['point_cloud'] = batch_data_label['point_clouds'].detach().cpu().numpy()
                 dictie['parsed_gt'] = batch_gt_map_cls
