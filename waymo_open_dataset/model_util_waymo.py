@@ -1,7 +1,3 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# 
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
 
 import numpy as np
 import sys
@@ -13,7 +9,7 @@ sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 
 class WaymoDatasetConfig(object):
     def __init__(self):
-        self.num_class = 5
+        self.num_class = 3
         self.num_heading_bin = 12 # TODO: Figure out what is this?!
         self.num_size_cluster = 3 # same as number of classes
 

@@ -1,7 +1,7 @@
 ''' Provides Python helper function to read Waymo Open Dataset dataset.
 
 Author: Ahmed Bahnasy
-Date: 
+Date: 2020
 
 '''
 
