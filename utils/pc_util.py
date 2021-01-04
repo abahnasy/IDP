@@ -31,12 +31,22 @@ import trimesh
 # ----------------------------------------
 # Point Cloud Sampling
 # ----------------------------------------
-
+# ABAHNASY: fix sampling problem
 def random_sampling(pc, num_sample, replace=None, return_choices=False):
     """ Input is NxC, output is num_samplexC
     """
-    if replace is None: replace = (pc.shape[0]<num_sample)
-    choices = np.random.choice(pc.shape[0], num_sample, replace=replace)
+    if pc.shape[0]<num_sample:
+        additional_choices = np.random.choice(pc.shape[0], num_sample - pc.shape[0], False)
+        choices = np.concatenate(([i for i in range(pc.shape[0], additional_choices)]),axis = 0)
+        assert choices.shape[0] == num_sample # make sure that the sampling is equal to requested size
+        assert len(set(choices)) == pc.shape[0] # make sure that the sampling contains all the original point cloud
+    else:
+        choices = np.random.choice(pc.shape[0], num_sample, replace=False)    
+    
+    # if replace is None:
+    #     replace = (pc.shape[0]<num_sample)
+    # choices = np.random.choice(pc.shape[0], num_sample, replace=replace)
+    
     if return_choices:
         return pc[choices], choices
     else:
