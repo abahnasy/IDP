@@ -53,6 +53,7 @@ class waymo_object(object):
             segment_dict['frames_list'] = frames_list
             self.segments_dict_list.append(segment_dict)
        
+       # used to update the dataset in case of change of frames or semgments
         if save_dict_list:
             # write on desk segments dict list to be used by the dataloader
             with open(os.path.join(self.split_dir, 'segments_dict_list'), 'wb') as f:
@@ -195,7 +196,7 @@ def data_viz(data_dir, idx: int = np.nan, verbose: bool = False):
     fig.update_layout(scene_aspectmode="data")
     fig.show()
 
-def extract_waymo_data_to_segment(segment_id_requested, data_dir, split, output_folder, num_point=180000,
+def extract_waymo_data_for_segment(segment_id_requested, data_dir, split, output_folder, num_point=180000,
     type_whitelist=DEFAULT_TYPE_WHITELIST,
     save_votes=False, verbose: bool = False):
     ''' Extracts votes for only one idx
@@ -534,7 +535,7 @@ if __name__=='__main__':
     dataset = waymo_object(os.path.join(BASE_DIR, 'dataset'), split='val', save_dict_list=True)
     # print('\n'.join(dataset.segments_list))
 
-    # extract_waymo_data_to_segment( 
+    # extract_waymo_data_for_segment( 
     #     'segment-2692887320656885771_2480_000_2500_000',
     #     os.path.join(BASE_DIR, 'dataset'),
     #     split = 'train', 

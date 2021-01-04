@@ -20,17 +20,21 @@ import waymo_utils
 from model_util_waymo import WaymoDatasetConfig
 
 DC = WaymoDatasetConfig() # dataset specific config
-MAX_NUM_OBJ = 384 # maximum number of objects allowed per scene
-# MEAN_COLOR_RGB = np.array([0.5,0.5,0.5]) # sunrgbd color is in 0~1
+MAX_NUM_OBJ = 128 # maximum number of objects allowed per scene
+
+# RAW_LABELS =  {0: 'TYPE_UNKNOWN', 1: 'TYPE_VEHICLE' , 2: 'TYPE_PEDESTRIAN', 3: 'TYPE_SIGN', 4: 'TYPE_CYCLIST'}
 
 class WaymoDetectionVotesDataset(Dataset):
     def __init__(self, split_set='train', num_points=180000,
         use_height=False,
         augment=False,
         verbose:bool = True):
-        self.mapping_labels = {1:0,2:1,4:2} # map dataset labels to our labels to handle discarded classes 
-        self.excluded_labels = [0,3] # exclude unknowns and signs labels
+        # self.mapping_labels = {1:0,2:1,4:2} # map dataset labels to our labels to handle discarded classes 
+        # self.excluded_labels = [0,3] # exclude unknowns and signs labels
         self.split_set = split_set
+        self.type2class = {0: 'TYPE_UNKNOWN', 1: 'TYPE_VEHICLE' , 2: 'TYPE_PEDESTRIAN', 3: 'TYPE_SIGN', 4: 'TYPE_CYCLIST'}
+        self.class2type = {self.type2class[t]:t for t in self.type2class}
+        self.classes = ['TYPE_VEHICLE'] #, 'TYPE_PEDESTRIAN', 'TYPE_CYCLIST']
         self.data_path = os.path.join(BASE_DIR,
                 'dataset') # TODO: rename to votes data path
 
@@ -60,6 +64,7 @@ class WaymoDetectionVotesDataset(Dataset):
     def __len__(self):
         return self.num_frames
     
+
     def resolve_idx_to_frame_path(self, idx):
         ''' Get Global idx and transorm into segment frame idx
         '''
@@ -73,6 +78,22 @@ class WaymoDetectionVotesDataset(Dataset):
                 if not os.path.exists(frame_path):
                     raise ValueError("Frame path doesn't exist, error in idx_to_frame_path function")
                 return frame_path
+
+
+    def filtrate_objects(self, labels):
+        '''
+        obje_list Nx8 array contains all annotated objects
+        '''
+        type_whitelist = [self.class2type[i] for i in self.classes]
+        
+        # remove unwanted classes
+        rows_to_be_deleted = []
+        for i in range(labels.shape[0]):
+            if not labels[i,0] in type_whitelist:
+                rows_to_be_deleted.append(i)
+        labels = np.delete(labels, rows_to_be_deleted, 0)
+        return labels
+
 
     def __getitem__(self, idx):
         """
@@ -93,9 +114,7 @@ class WaymoDetectionVotesDataset(Dataset):
             max_gt_bboxes: unused
         """
         frame_data_path = self.resolve_idx_to_frame_path(idx)
-        
         segment_id = frame_data_path.split('/')[-2] 
-        
         frame_idx = frame_data_path.split('/')[-1].split('_')[-1].split('.')[0]
         # print('data idx is ', idx)
         # print('extracted segment id is ', segment_id)
@@ -112,17 +131,20 @@ class WaymoDetectionVotesDataset(Dataset):
         frame_data_path = os.path.join(self.data_path, self.split_set,'{}'.format(segment_id) ,'{}_{}.npz'.format(segment_id, frame_idx))
         
         frame_data = np.load(frame_data_path)
-        labels = frame_data['labels']
+        labels = frame_data['labels']        
         assert labels.shape[1] == 8
+        # print('labels types before filterations ', labels[:,0])
+        labels = self.filtrate_objects(labels)
+        # print('labels types after filterations ', labels[:,0])
         # create bboxes matrix
         bboxes = np.zeros_like(labels)
         for i in range(labels.shape[0]):
-            if labels[i,0] in self.excluded_labels: # skip signs and unknown labels
-                continue
+            # if labels[i,0] in self.excluded_labels: # skip signs and unknown labels
+            #     continue
             bboxes[i, 0:3] = labels[i,4:7] #centers
             bboxes[i, 3:6] = labels[i,1:4] #lwh
             bboxes[i, 6] = labels[i,7] # heading
-            bboxes[i, 7] = self.mapping_labels[labels[i,0]] #label
+            bboxes[i, 7] = DC.raw2used_labels[labels[i,0]] #label
         
         
         point_votes = np.load(os.path.join(self.data_path, self.split_set, 'votes', '{}'.format(segment_id) ,'{}_{}_votes.npz'.format(segment_id, frame_idx)))['point_votes'] # Nx10

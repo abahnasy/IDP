@@ -192,12 +192,14 @@ def adjust_learning_rate(optimizer, epoch):
 
 # TFBoard Visualizers
 TRAIN_VISUALIZER = TfVisualizer(FLAGS, 'train')
+TRAIN_BATCH_VISUALIZER = TfVisualizer(FLAGS, 'train_batch')
 VAL_VISUALIZER = TfVisualizer(FLAGS, 'val')
+
 
 
 # Used for AP calculation
 CONFIG_DICT = {'remove_empty_box':False, 'use_3d_nms':True,
-    'nms_iou':0.01, 'use_old_type_nms':False, 'cls_nms':True,
+    'nms_iou':0.25, 'use_old_type_nms':False, 'cls_nms':True,
     'per_class_proposal': False, 'conf_thresh':0.05,
     'dataset_config':DATASET_CONFIG}
 
@@ -243,22 +245,18 @@ def train_one_epoch():
         # print("GPU Memory usage after calling backward function {}".format(torch.cuda.memory_allocated(0)))
         optimizer.step()
         # print("GPU Memory usage after calling optimizer step function {}".format(torch.cuda.memory_allocated(0)))
+        # ==== Temp implementation === #
+        # TRAIN_BATCH_VISUALIZER.log_scalar(loss.item(),())
+        TRAIN_BATCH_VISUALIZER.logger.scalar_summary('loss', loss.item(), EPOCH_CNT*len(TRAIN_DATALOADER)+batch_idx)
+        # for key in sorted(stat_dict.keys()):
+            # log_string('mean %s: %f'%(key, stat_dict[key]/FLAGS.batch_size))
+            # stat_dict[key] = 0 
 
         # Accumulate statistics and print out
         for key in end_points:
             if 'loss' in key or 'acc' in key or 'ratio' in key:
                 if key not in stat_dict: stat_dict[key] = 0
                 stat_dict[key] += end_points[key].item()
-
-        
-
-        
-        
-        # ==== Temp implementation === #
-        # TRAIN_VISUALIZER.log_scalars({key:stat_dict[key]/FLAGS.batch_size for key in stat_dict},(EPOCH_CNT*len(TRAIN_DATALOADER)+batch_idx))
-        # for key in sorted(stat_dict.keys()):
-        #     log_string('mean %s: %f'%(key, stat_dict[key]/FLAGS.batch_size))
-        #     stat_dict[key] = 0 
 
         if FLAGS.dry_run == True:
             print('Dry run successfully executed !')
@@ -329,8 +327,8 @@ def evaluate_overfit_run():
     temp function to test overfit over couple of frames. test network functionality
     """
     stat_dict = {} # collect statistics
-    # ap_calculator = APCalculator(ap_iou_thresh=FLAGS.ap_iou_thresh,
-        # class2type_map=DATASET_CONFIG.class2type)
+    ap_calculator = APCalculator(ap_iou_thresh=FLAGS.ap_iou_thresh,
+        class2type_map=DATASET_CONFIG.class2type)
     net.eval() # set model to eval mode (for bn and dp)
     for batch_idx, batch_data_label in enumerate(VAL_DATALOADER):
         
@@ -363,25 +361,33 @@ def evaluate_overfit_run():
             print("number of predictions in frame {} is: {}".format(i, len(batch_pred_map_cls[i])))
 
         # Extract prediction for visialization
-        print("exporting visualizations file")
-        dictie = {}
+        # print("exporting visualizations file")
+        # dictie = {}
         # pick only the first frame in the batch
-        dictie['point_cloud'] = batch_data_label['point_clouds'][0].detach().cpu().numpy()
-        dictie['parsed_gt'] = batch_gt_map_cls[0]
-        dictie['parsed_predictions'] = batch_pred_map_cls[0]
+        # dictie['point_cloud'] = batch_data_label['point_clouds'][0].detach().cpu().numpy()
+        # dictie['parsed_gt'] = batch_gt_map_cls[0]
+        # dictie['parsed_predictions'] = batch_pred_map_cls[0]
         # dictie['sa1_xyz'] = end_points['sa1_xyz'][0].detach().cpu().numpy()
         # dictie['sa2_xyz'] = end_points['sa2_xyz'][0].detach().cpu().numpy()
         # dictie['sa3_xyz'] = end_points['sa3_xyz'][0].detach().cpu().numpy()
         # dictie['sa4_xyz'] = end_points['sa4_xyz'][0].detach().cpu().numpy()
         # dictie['fp2_xyz'] = end_points['fp2_xyz'][0].detach().cpu().numpy()
-        import pickle
-        with open("./saved_viz/gt_epoch_{}_batch_{}".format(EPOCH_CNT, batch_idx), 'wb') as fp:
-            pickle.dump(dictie, fp)
+        # dictie['aggregated_vote_xyz'] = end_points['aggregated_vote_xyz'][0].cpu().numpy()
+        
+        # for key, value in end_points.items():
+        #     print(key)
+        #     print(value)
+
+                
+        
+        # import pickle
+        # with open("./saved_viz/gt_epoch_{}_batch_{}".format(EPOCH_CNT, batch_idx), 'wb') as fp:
+        #     pickle.dump(dictie, fp)
             
 
         
         
-        # ap_calculator.step(batch_pred_map_cls, batch_gt_map_cls)
+        ap_calculator.step(batch_pred_map_cls, batch_gt_map_cls)
 
         # Dump evaluation results for visualization
         # if FLAGS.dump_results and batch_idx == 0 and EPOCH_CNT %10 == 0:
@@ -393,9 +399,9 @@ def evaluate_overfit_run():
         log_string('eval mean %s: %f'%(key, stat_dict[key]/(float(batch_idx+1))))
 
     # Evaluate average precision
-    # metrics_dict = ap_calculator.compute_metrics()
-    # for key in metrics_dict:
-    #     log_string('eval %s: %f'%(key, metrics_dict[key]))
+    metrics_dict = ap_calculator.compute_metrics()
+    for key in metrics_dict:
+        log_string('eval %s: %f'%(key, metrics_dict[key]))
 
     mean_loss = stat_dict['loss']/float(batch_idx+1)
     return mean_loss
