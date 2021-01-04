@@ -160,7 +160,7 @@ class Pointnet2Backbone_MSG(nn.Module):
         self.sa1 = PointnetSAModuleMSGVotes(
                 npoint=4096,
                 radii=[0.1, 0.5],
-                nsamples=[64, 64],
+                nsamples=[16, 32],
                 mlps=[[input_feature_dim, 16, 16, 32], [input_feature_dim, 32, 32, 64]],
                 use_xyz=True
             )
@@ -168,7 +168,7 @@ class Pointnet2Backbone_MSG(nn.Module):
         self.sa2 = PointnetSAModuleMSGVotes(
                 npoint=1024,
                 radii=[0.5, 1.0],
-                nsamples=[32, 32],
+                nsamples=[16, 32],
                 mlps=[[96, 64, 64, 128], [96, 64, 96, 128]],
                 use_xyz=True
             )
@@ -176,7 +176,7 @@ class Pointnet2Backbone_MSG(nn.Module):
         self.sa3 = PointnetSAModuleMSGVotes(
                 npoint=512,
                 radii=[1.0, 2.0],
-                nsamples=[16, 16],
+                nsamples=[16, 32],
                 mlps=[[256, 128, 196, 256], [256, 128, 196, 256]], 
                 use_xyz=True
             )
@@ -184,13 +184,15 @@ class Pointnet2Backbone_MSG(nn.Module):
         self.sa4 = PointnetSAModuleMSGVotes(
                 npoint=256,
                 radii=[2.0, 4.0],
-                nsamples=[16, 16],
+                nsamples=[16, 32],
                 mlps=[[512, 256, 256, 512], [512, 256, 384, 512]],
                 use_xyz=True
             )
 
         self.fp1 = PointnetFPModule(mlp=[1024+512, 512, 512])
         self.fp2 = PointnetFPModule(mlp=[512+256, 512, 512])
+        # self.fp3 = PointnetFPModule(mlp=[512+96, 512, 512])
+        # self.fp4 = PointnetFPModule(mlp=[128+512, 512, 512])
 
     def _break_up_pc(self, pc):
         xyz = pc[..., 0:3].contiguous()
@@ -253,16 +255,14 @@ class Pointnet2Backbone_MSG(nn.Module):
         end_points['sa4_xyz'] = xyz
         end_points['sa4_features'] = features
 
-        # --------- 2 FEATURE UPSAMPLING LAYERS --------
 
+        # --------- 2 FEATURE UPSAMPLING LAYERS --------
         features = self.fp1(end_points['sa3_xyz'], end_points['sa4_xyz'], end_points['sa3_features'], end_points['sa4_features'])
         features = self.fp2(end_points['sa2_xyz'], end_points['sa3_xyz'], end_points['sa2_features'], features)
         end_points['fp2_features'] = features
         end_points['fp2_xyz'] = end_points['sa2_xyz']
         num_seed = end_points['fp2_xyz'].shape[1]
         end_points['fp2_inds'] = end_points['sa1_inds'][:,0:num_seed] # indices among the entire input point clouds
-        
-        # print("------ End of Forward function for the backbone ------")
         return end_points
 
 
